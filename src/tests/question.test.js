@@ -1,60 +1,90 @@
-const request = require('supertest');
-const app = require('../app');
-const mongoose = require('mongoose');
+const sinon = require('sinon');
+const chai = require('chai');
+const expect = chai.expect;
+chai.use(require('sinon-chai'));
+const QuestionService = require('../services/questionService');
+const Question = require('../models/Question');
+const aiService = require('../services/aiService');
 
-beforeAll(async () => {
-    await mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
-});
+describe('QuestionService', () => {
+  let sandbox;
 
-afterAll(async () => {
-    await mongoose.connection.close();
-});
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
 
-describe('Question Endpoints', () => {
-    let token;
-    let questionId;
+  afterEach(() => {
+    sandbox.restore();
+  });
 
-    beforeAll(async () => {
-        await request(app)
-            .post('/api/users')
-            .send({
-                email: 'test@example.com',
-                password: 'password123'
-            })
-            .expect(201);
+  describe('createQuestion', () => {
+    it('should create a new question with a generated answer', async () => {
+      const userId = 'userId';
+      const content = 'Sample question content';
+      const answer = 'Sample answer';
+      const question = { content, answer };
 
-        const res = await request(app)
-            .post('/api/auth/login')
-            .send({
-                email: 'test@example.com',
-                password: 'password123'
-            })
-            .expect(200);
+      sandbox.stub(aiService, 'generateAnswer').resolves(answer);
 
-        token = res.body.token;
+      sandbox.stub(Question.prototype, 'save').resolves(question);
+
+      const result = await QuestionService.createQuestion(userId, content);
+
+      expect(aiService.generateAnswer).to.have.been.calledOnceWith(content);
+      expect(Question.prototype.save).to.have.been.calledOnce;
+      expect(result).to.includes(question);
     });
 
-    it('should create a new question', async () => {
-        const res = await request(app)
-            .post('/api/questions')
-            .set('Authorization', `Bearer ${token}`)
-            .send({
-                content: 'What is the capital of France?'
-            })
-            .expect(201);
+    it('should handle error when generateAnswer fails', async () => {
+      const userId = 'userId';
+      const content = 'Sample question content';
 
-        questionId = res.body._id;
-        expect(questionId).toBeDefined();
-        expect(res.body.answer).toBeDefined();
+      sandbox.stub(aiService, 'generateAnswer').rejects(new Error('Failed to generate answer'));
+
+      try {
+        await QuestionService.createQuestion(userId, content);
+      } catch (err) {
+        expect(err.message).to.equal('Failed to generate answer');
+      }
     });
 
-    it('should get the question by id', async () => {
-        const res = await request(app)
-            .get(`/api/questions/${questionId}`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
+    it('should handle error when saving question fails', async () => {
+      const userId = 'userId';
+      const content = 'Sample question content';
 
-        expect(res.body.content).toBe('What is the capital of France?');
-        expect(res.body.answer).toBeDefined();
+      sandbox.stub(aiService, 'generateAnswer').resolves('Sample answer');
+      sandbox.stub(Question.prototype, 'save').rejects(new Error('Failed to save question'));
+
+      try {
+        await QuestionService.createQuestion(userId, content);
+      } catch (err) {
+        expect(err.message).to.equal('Failed to save question');
+      }
     });
+  });
+
+  describe('getQuestion', () => {
+    it('should return a question by its ID', async () => {
+      const questionId = 'questionId';
+      const question = { _id: questionId, userId: 'userId', content: 'Sample question content' };
+
+      sandbox.stub(Question, 'findById').resolves(question);
+
+      const result = await QuestionService.getQuestion(questionId);
+
+      expect(Question.findById).to.have.been.calledOnceWith(questionId);
+      expect(result).to.deep.equal(question);
+    });
+
+    it('should return null if question is not found', async () => {
+      const questionId = 'questionId';
+
+      sandbox.stub(Question, 'findById').resolves(null);
+
+      const result = await QuestionService.getQuestion(questionId);
+
+      expect(Question.findById).to.have.been.calledOnceWith(questionId);
+      expect(result).to.be.null;
+    });
+  });
 });

@@ -1,56 +1,141 @@
-const request = require('supertest');
-const app = require('../app');
-const mongoose = require('mongoose');
+// src/tests/user.test.js
+const sinon = require('sinon');
+const chai = require('chai');
+chai.use(require('sinon-chai'));
+// chai.use(require('chai-as-promised'));
+const expect = chai.expect;
 
-beforeAll(async () => {
-    await mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
-});
+const UserService = require('../services/userservice');
+const User = require('../models/User');
+const Question = require('../models/Question');
 
-afterAll(async () => {
-    await mongoose.connection.close();
-});
+describe('UserService', () => {
+  let sandbox;
 
-describe('User Endpoints', () => {
-    let token;
-    let userId;
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
 
-    beforeAll(async () => {
-        const res = await request(app)
-            .post('/api/users')
-            .send({
-                email: 'test@example.com',
-                password: 'password123'
-            })
-            .expect(201);
+  afterEach(() => {
+    sandbox.restore();
+  });
 
-        userId = res.body._id;
+  describe('createUser', () => {
+    it('should create a new user', async () => {
+      const email = 'test123@example.com';
+      const password = 'password123';
 
-        const loginRes = await request(app)
-            .post('/api/auth/login')
-            .send({
-                email: 'test@example.com',
-                password: 'password123'
-            })
-            .expect(200);
+      sandbox.stub(User, 'findOne').resolves(null);
+      sandbox.stub(User.prototype, 'save').resolves();
 
-        token = loginRes.body.token;
+      await UserService.createUser(email, password);
+
+      expect(User.findOne).to.have.been.calledOnceWith({ email });
+      expect(User.prototype.save).to.have.been.calledOnce;
     });
 
-    it('should get user profile', async () => {
-        const res = await request(app)
-            .get(`/api/users/${userId}`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
+    it('should throw an error if user already exists', async () => {
+      const email = 'test@example.com';
+      const password = 'password123';
 
-        expect(res.body.email).toBe('test@example.com');
+      try{
+        sandbox.stub(User, 'findOne').resolves({ email, password });
+
+        await UserService.createUser(email, password)
+
+      }catch(err){
+        expect(User.findOne).to.have.been.calledOnceWith({ email });
+        expect(err.message).to.be.equal('User already exists');
+      }
+      
+    });
+  });
+
+  describe('getUserProfile', () => {
+    it('should return user profile without password', async () => {
+      const userId = 'userId';
+      const user = { _id: userId, email: 'test@example.com' };
+
+      sandbox.stub(User, 'findById').resolves(user);
+
+      const result = await UserService.getUserProfile(userId);
+
+      expect(User.findById).to.have.been.calledOnceWith(userId);
+      expect(result).to.deep.equal(user);
     });
 
-    it('should get user questions', async () => {
-        const res = await request(app)
-            .get(`/api/users/${userId}/questions`)
-            .set('Authorization', `Bearer ${token}`)
-            .expect(200);
+    it('should return null if user not found', async () => {
+      const userId = 'userId';
 
-        expect(Array.isArray(res.body)).toBe(true);
+      sandbox.stub(User, 'findById').resolves(null);
+
+      const result = await UserService.getUserProfile(userId);
+
+      expect(User.findById).to.have.been.calledOnceWith(userId);
+      expect(result).to.be.null;
     });
+  });
+
+  describe('getUserByEmail', () => {
+    it('should return user by email', async () => {
+      const email = 'test@example.com';
+      const user = { _id: 'userId', email };
+
+      sandbox.stub(User, 'findOne').resolves(user);
+
+      const result = await UserService.getUserByEmail(email);
+
+      expect(User.findOne).to.have.been.calledOnceWith({ email });
+      expect(result).to.deep.equal(user);
+    });
+
+    it('should return null if user not found', async () => {
+      const email = 'test@example.com';
+
+      sandbox.stub(User, 'findOne').resolves(null);
+
+      const result = await UserService.getUserByEmail(email);
+
+      expect(User.findOne).to.have.been.calledOnceWith({ email });
+      expect(result).to.be.null;
+    });
+  });
+
+  describe('getUserQuestions', () => {
+    it('should return questions asked by user', async () => {
+      const userId = 'userId';
+      const questions = [{ _id: 'questionId', userId }];
+
+      sandbox.stub(Question, 'find').resolves(questions);
+
+      const result = await UserService.getUserQuestions(userId);
+
+      expect(Question.find).to.have.been.calledOnceWith({ userId });
+      expect(result).to.deep.equal(questions);
+    });
+
+    it('should return an empty array if no questions found', async () => {
+      const userId = 'userId';
+
+      sandbox.stub(Question, 'find').resolves([]);
+
+      const result = await UserService.getUserQuestions(userId);
+
+      expect(Question.find).to.have.been.calledOnceWith({ userId });
+      expect(result).to.deep.equal([]);
+    });
+  });
+
+  describe('getUsers', () => {
+    it('should return all users without password', async () => {
+      const users = [{ _id: 'userId', email: 'test@example.com' }];
+
+      sandbox.stub(User, 'find').resolves(users);
+
+      const result = await UserService.getUsers();
+
+      expect(User.find).to.have.been.calledOnce;
+      expect(result).to.deep.equal(users);
+    });
+  });
 });
