@@ -6,29 +6,11 @@ exports.login = async (req, res, next) => {
 
     try {
         const token = await authenticateUser(email, password);
-        // localStorage.setItem('token', token);
         res.json({ token });
     } catch (err) {
         res.status(401).json({ message: err.message });
     }
 };
-
-// exports.logout = (req, res) => {
-//     const authHeader = req.headers.authorization;
-    
-//     if (!authHeader) {
-//         return res.status(401).json({ message: 'Authorization header missing' });
-//     }
-
-//     const token = authHeader.split(' ')[1];
-
-//     try {
-//         localStorage.removeItem('token');
-//         res.json({ message: 'Logout successful' });
-//     } catch (err) {
-//         res.status(500).json({ message: 'Server error' });
-//     }
-// };
 
 exports.logout = async (req, res) => {
     const authHeader = req.headers.authorization;

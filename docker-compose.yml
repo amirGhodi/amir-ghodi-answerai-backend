@@ -17,7 +17,6 @@ services:
   environment:
     - MONGO_URI=mongodb://host.docker.internal:27017/NodeJSAssessment
     - JWT_SECRET=JWT_SECRET
-    - OPENAI_API_KEY=OPENAI_API_KEY
     - PORT=3000
   depends_on:
     - mongo

@@ -1,9 +1,8 @@
-// import Anthropic from '@anthropic-ai/sdk';
 const { Anthropic } = require('@anthropic-ai/sdk');
 const{ ANTHROPIC_API_KEY } = require('../config');
 
 const anthropic = new Anthropic({
-  apiKey: ANTHROPIC_API_KEY // This is the default and can be omitted
+  apiKey: ANTHROPIC_API_KEY 
 });
 
 exports.generateAnswer = async(question)  => {
